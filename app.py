@@ -196,7 +196,20 @@ def upload_file():
                 color: red;
                 margin-top: 10px;
             }
+            .loading {
+                display: none;
+                margin-top: 20px;
+            }
+            .loading img {
+                width: 50px;
+                height: 50px;
+            }
         </style>
+        <script>
+            function showLoading() {
+                document.getElementById('loading').style.display = 'block';
+            }
+        </script>
     </head>
     <body>
         <div class="container">
@@ -210,14 +223,15 @@ def upload_file():
                     </div>
                 {% endif %}
             {% endwith %}
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST" enctype="multipart/form-data" onsubmit="showLoading()">
                 <input type="file" name="file" accept=".pdf" required>
                 <br>
                 <input type="submit" value="Upload">
             </form>
         </div>
-    </body>
-    </html>
+    <div id="responseMessage"></div>                         
+</body>
+</html>
     ''')
 
 @app.route('/', methods=['POST'])
@@ -261,9 +275,22 @@ def upload_file_post():
         flash(f"An error occurred: {str(e)}")
         return redirect(request.url)
 
+from flask import after_this_request
+
 @app.route('/uploads/<filename>')
 def download_file(filename):
-    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename), as_attachment=True)
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(file_path)
+            print(f"🗑️ Deleted file: {file_path}")
+        except Exception as e:
+            print(f"⚠️ Error deleting file: {e}")
+        return response
+
+    return send_file(file_path, as_attachment=True)
 
 if __name__ == '__main__':
     #app.run(port=5000, debug=True)
