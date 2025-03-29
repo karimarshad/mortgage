@@ -2,7 +2,7 @@ import pdfplumber
 import re
 import time
 import csv
-from flask import Flask, request, redirect, url_for, send_file, render_template_string
+from flask import Flask, request, redirect, url_for, send_file, render_template_string, flash
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
@@ -10,6 +10,7 @@ from datetime import datetime
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+app.secret_key = 'supersecretkey'
 
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
@@ -50,11 +51,15 @@ def extract_names(pdf_path):
             if text:
                 # Normalize the text
                 text = normalize_text(text)
-                name_pattern = r'([\w\s\.]+)\(Mortgage Foreclosure\)'
+                #name_pattern = r'([\w\s\.]+)\(Mortgage Foreclosure\)'
+                name_pattern = r'([\w\s\.\(\)]+),?\s*\(Mortgage Foreclosure\)'
                 name_matches = re.findall(name_pattern, text)
                 # Remove newline characters from names
-                name_matches = [name.replace('\n', ' ').strip() for name in name_matches]
+                name_matches = [name.replace('\n', ' ').strip().rstrip(',') for name in name_matches]
+                #name_matches = [name.replace('\n', ' ').strip() for name in name_matches]
                 names.extend(name_matches)
+    # Remove duplicates and sort names
+    names = [re.sub(r'^\d+\)\s*', '', name).strip() for name in names]
     print(f"📊 Total names found: {len(names)}")
     print(names)
     return names
@@ -93,44 +98,48 @@ def extract_details(record):
     }
 
 def process_pdf(pdf_path):
-    # Step 3: Process the PDF and print the summary
-    start_time = time.time()  # Start timer
-    print(f"📂 Processing PDF: {pdf_path}")
-    foreclosure_records = parse_foreclosure_records(pdf_path)
-    names = extract_names(pdf_path)
-    
-    if len(names) != len(foreclosure_records):
-        print("⚠️ Warning: The number of names does not match the number of foreclosure records.")
-        return []
+    try:
+        # Step 3: Process the PDF and print the summary
+        start_time = time.time()  # Start timer
+        print(f"📂 Processing PDF: {pdf_path}")
+        foreclosure_records = parse_foreclosure_records(pdf_path)
+        names = extract_names(pdf_path)
 
-    detailed_results = []
-    full_records_count = 0
-    today_date = datetime.today().strftime('%Y-%m-%d')
+        if len(names) != len(foreclosure_records):
+            raise ValueError("The number of names does not match the number of foreclosure records.")
 
-    for record_num, (record, name) in enumerate(zip(foreclosure_records, names), start=1):
-        print(f"🔹 Processing record {record_num}/{len(foreclosure_records)}")
-        details = extract_details(record)
-        details["Name"] = name  # Add the name to the details
-        details["Today's Date"] = today_date  # Add today's date to the details
-        detailed_results.append(details)
-        if all(details.values()):
-            full_records_count += 1
+        detailed_results = []
+        full_records_count = 0
+        today_date = datetime.today().strftime('%Y-%m-%d')
 
-    # Print summary
-    total_records = len(detailed_results)
-    partial_records_count = total_records - full_records_count
-    full_records_percentage = (full_records_count / total_records) * 100 if total_records > 0 else 0
+        for record_num, (record, name) in enumerate(zip(foreclosure_records, names), start=1):
+            print(f"🔹 Processing record {record_num}/{len(foreclosure_records)}")
+            details = extract_details(record)
+            details["Name"] = name  # Add the name to the details
+            details["Today's Date"] = today_date  # Add today's date to the details
+            detailed_results.append(details)
+            if all(details.values()):
+                full_records_count += 1
 
-    print(f"✅ Total records processed: {total_records}")
-    print(f"✅ Full records (all 4 attributes): {full_records_count}")
-    print(f"✅ Partial records: {partial_records_count}")
-    print(f"✅ Percentage of full records: {full_records_percentage:.2f}%")
+        # Print summary
+        total_records = len(detailed_results)
+        partial_records_count = total_records - full_records_count
+        full_records_percentage = (full_records_count / total_records) * 100 if total_records > 0 else 0
 
-    end_time = time.time()  # End timer
-    elapsed_time = end_time - start_time
-    print(f"⏱️ Total time taken: {elapsed_time:.2f} seconds")
+        print(f"✅ Total records processed: {total_records}")
+        print(f"✅ Full records (all 4 attributes): {full_records_count}")
+        print(f"✅ Partial records: {partial_records_count}")
+        print(f"✅ Percentage of full records: {full_records_percentage:.2f}%")
 
-    return detailed_results
+        end_time = time.time()  # End timer
+        elapsed_time = end_time - start_time
+        print(f"⏱️ Total time taken: {elapsed_time:.2f} seconds")
+
+        return detailed_results
+
+    except Exception as e:
+        print(f"❌ Error processing PDF: {e}")
+        raise e  # Re-raise the exception to handle it in the calling function
 
 @app.route('/')
 def upload_file():
@@ -183,11 +192,24 @@ def upload_file():
             input[type="submit"]:hover {
                 background-color: #0056b3;
             }
+            .error {
+                color: red;
+                margin-top: 10px;
+            }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Upload PDF for Foreclosure Records Extraction</h1>
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="error">
+                        {% for message in messages %}
+                            <p>{{ message }}</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
             <form method="POST" enctype="multipart/form-data">
                 <input type="file" name="file" accept=".pdf" required>
                 <br>
@@ -200,28 +222,44 @@ def upload_file():
 
 @app.route('/', methods=['POST'])
 def upload_file_post():
-    if 'file' not in request.files:
-        return redirect(request.url)
-    file = request.files['file']
-    if file.filename == '':
-        return redirect(request.url)
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
-        detailed_results = process_pdf(file_path)
-        if not detailed_results:
-            return "Error processing the PDF file."
+    try:
+        if 'file' not in request.files:
+            flash("No file part in the request.")
+            return redirect(request.url)
+        file = request.files['file']
+        if file.filename == '':
+            flash("No file selected for uploading.")
+            return redirect(request.url)
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            try:
+                detailed_results = process_pdf(file_path)
+                if not detailed_results:
+                    flash("Error processing the PDF file. Please check the file format and content.")
+                    return redirect(request.url)
 
-        # Write results to a CSV file
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        csv_file = os.path.join(app.config['UPLOAD_FOLDER'], f'foreclosure_records_{timestamp}.csv')
-        with open(csv_file, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=["Name", "Address", "Loan Amount", "Auction Date", "Today's Date"])
-            writer.writeheader()
-            writer.writerows(detailed_results)
-        return redirect(url_for('download_file', filename=f'foreclosure_records_{timestamp}.csv'))
-    return redirect(request.url)
+                # Write results to a CSV file
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                csv_file = os.path.join(app.config['UPLOAD_FOLDER'], f'foreclosure_records_{timestamp}.csv')
+                with open(csv_file, mode='w', newline='') as file:
+                    writer = csv.DictWriter(file, fieldnames=["Name", "Address", "Loan Amount", "Auction Date", "Today's Date"])
+                    writer.writeheader()
+                    writer.writerows(detailed_results)
+                return redirect(url_for('download_file', filename=f'foreclosure_records_{timestamp}.csv'))
+            except ValueError as ve:
+                flash(str(ve))
+                return redirect(request.url)
+            except Exception as e:
+                flash(f"An unexpected error occurred: {str(e)}")
+                return redirect(request.url)
+        else:
+            flash("Invalid file type. Please upload a PDF file.")
+            return redirect(request.url)
+    except Exception as e:
+        flash(f"An error occurred: {str(e)}")
+        return redirect(request.url)
 
 @app.route('/uploads/<filename>')
 def download_file(filename):
