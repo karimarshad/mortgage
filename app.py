@@ -68,25 +68,40 @@ def extract_details(record):
     # Step 2: Extract details from one foreclosure record
     print(f"🔍 Extracting details from record: {record[:100]}...")  # Print the first 100 characters for context
 
-    address_pattern = r'\b\d{1,5}\s[\w\s]+(?:\s[A-Za-z]+)*,\s*(?:#\d{1,5},\s*)?[A-Za-z\s]+,\s[A-Za-z]{2}\s\d{5}(?:-\d{4})?\b'
+    # Updated address patterns
+    address_pattern = r'\b\d{1,5}\s[\w\s\-.]+?,\s[\w\s]+,\s[A-Z]{2}\s\d{5}(?:-\d{4})?\b'
+    address_pattern_commonly = r'Commonly known as[:\s]*([\w\s\-.]+?),\s*([\w\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)'
+    address_pattern_condo = r'(?:Situated in|Unit(?:s)?\s\d+,)\s*([\w\s\-.]+?),\s*([\w\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)'
+
+    # Match address patterns
     address_match = re.search(address_pattern, record)
-    address = address_match.group(0).strip() if address_match else "Not available"
+    address_match_commonly = re.search(address_pattern_commonly, record)
+    address_match_condo = re.search(address_pattern_condo, record)
+
+    # Extract address based on the first matching pattern
+    if address_match:
+        address = address_match.group(0).strip()
+    elif address_match_commonly:
+        address = f"{address_match_commonly.group(1)}, {address_match_commonly.group(2)}, {address_match_commonly.group(3)} {address_match_commonly.group(4)}"
+    elif address_match_condo:
+        address = f"{address_match_condo.group(1)}, {address_match_condo.group(2)}, {address_match_condo.group(3)} {address_match_condo.group(4)}"
+    else:
+        address = "Not available"
     print(f"📍 Address: {address}")
 
+    # Loan amount patterns
     loan_amount_pattern_1 = r'Amount claimed due.*?\$([\d,\.]+)'  # Handles line breaks
     loan_amount_pattern_2 = r'There is claimed to be due at the date \$([\d,\.]+)'  # Handles specific pattern
     loan_amount_pattern_3 = r'\$(\d{1,3}(?:,\d{3})*\.\d{2})'  # Handles currency format
     loan_amount_pattern = fr'{loan_amount_pattern_1}|{loan_amount_pattern_2}|{loan_amount_pattern_3}'
+
+    # Match loan amount
     loan_match = re.search(loan_amount_pattern_3, record)
     loan_amount = loan_match.group(1).strip() if loan_match else "Not available"
-    #if loan_match:
-    #    loan_amount = loan_match.group(0).strip()
-    #else:
-    #   loan_amount = "Not available"
-        #print(f"⚠️ Loan amount not found in record: {record[:100]}...")
-    #print(f"💰 Loan Amount: {loan_amount}")
+    print(f"💰 Loan Amount: {loan_amount}")
 
-    auction_date_pattern = r'starting promptly at\s*(\d{1,2}:\d{2} (?:AM|PM), on [A-Za-z]+\s\d{1,2},\s\d{4})'
+    # Auction date pattern
+    auction_date_pattern = r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b'
     auction_date_match = re.search(auction_date_pattern, record)
     auction_date = auction_date_match.group(0).strip() if auction_date_match else "Not available"
     print(f"🔔 Auction Date: {auction_date}")
@@ -95,7 +110,7 @@ def extract_details(record):
         "Address": address,
         "Loan Amount": loan_amount,
         "Auction Date": auction_date
-    }
+    }    
 
 def process_pdf(pdf_path):
     try:
@@ -188,7 +203,7 @@ def upload_file():
                 border-radius: 5px;
                 cursor: pointer;
                 font-size: 16px;
-            }
+            }  
             input[type="submit"]:hover {
                 background-color: #0056b3;
             }
