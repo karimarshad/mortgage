@@ -120,11 +120,17 @@ def extract_details(record):
     print(f"💰 Loan Amount: {loan_amount}")
 
     # Auction date pattern
-    auction_date_pattern = r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b'
+    auction_date_pattern = r'starting promptly at\s*(\d{1,2}:\d{2} (?:AM|PM), on [A-Za-z]+\s\d{1,2},\s\d{4})'
+    auction_date_pattern_general = r'\b(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s(?:January|February|March|April|May|June|July|August|September|October|November|December)\s\d{1,2},\s\d{4}\b'
+
+    #auction_date_pattern_general = r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}\b'
     auction_date_match = re.search(auction_date_pattern, record)
     auction_date = auction_date_match.group(0).strip() if auction_date_match else "Not available"
+    if auction_date == "Not available":
+        auction_date_match_general = re.search(auction_date_pattern_general, record)
+        auction_date = auction_date_match_general.group(0).strip() if auction_date_match_general else "Not available"
     print(f"🔔 Auction Date: {auction_date}")
-
+   
     return {
         "Address": address,
         "Loan Amount": loan_amount,
