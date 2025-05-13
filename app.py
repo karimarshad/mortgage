@@ -25,25 +25,29 @@ def normalize_text(text):
 def parse_foreclosure_records(pdf_path):
     # Step 1: Parse the PDF file into an array of foreclosure records
     foreclosure_records = []
+    full_text = ""  # Accumulate text across pages
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages):
             text = page.extract_text()
             print(f"🔍 Extracting text from page {page_num + 1}...")
             if text:
                 # Normalize the text
-                text = normalize_text(text)
+                #text = normalize_text(text)
+                full_text += " " + normalize_text(text)  # Append page text with a space NEW CODE to fix address parsing issue
                 # Split the text into individual foreclosure notices based on "(Mortgage Foreclosure)"
-                records = re.split(r"\([Mm]ortgage Foreclosure\)", text)
-                print(f"📄 Found {len(records) - 1} foreclosure records on page {page_num + 1}.")
-                # Add "(Mortgage Foreclosure)" back to maintain formatting
-                for record in records[1:]:  # Skip the first split (before the first foreclosure notice)
-                    foreclosure_records.append("(Mortgage Foreclosure)" + record.strip())
+                #records = re.split(r"\([Mm]ortgage Foreclosure\)", text)
+    records = re.split(r"\([Mm]ortgage Foreclosure\)", full_text)
+    print(f"📄 Found {len(records) - 1} foreclosure records on page {page_num + 1}.")
+    # Add "(Mortgage Foreclosure)" back to maintain formatting
+    for record in records[1:]:  # Skip the first split (before the first foreclosure notice)
+        foreclosure_records.append("(Mortgage Foreclosure)" + record.strip())
     print(f"📊 Total foreclosure records found: {len(foreclosure_records)}")
     return foreclosure_records
 
 def extract_names(pdf_path):
     # Extract names separately
     names = []
+    full_text = ""  # Accumulate text across pages
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages):
             text = page.extract_text()
@@ -51,13 +55,15 @@ def extract_names(pdf_path):
             if text:
                 # Normalize the text
                 text = normalize_text(text)
+                full_text += " " + normalize_text(text) # Append page text with a space NEW CODE to fix address parsing issue
                 #name_pattern = r'([\w\s\.]+)\(Mortgage Foreclosure\)'
-                name_pattern = r'([\w\s\.\(\)]+),?\s*\(Mortgage Foreclosure\)'
-                name_matches = re.findall(name_pattern, text)
+    name_pattern = r'([\w\s\.\(\)]+),?\s*\(Mortgage Foreclosure\)'
+                #name_matches = re.findall(name_pattern, text)
+    name_matches = re.findall(name_pattern, full_text)
                 # Remove newline characters from names
-                name_matches = [name.replace('\n', ' ').strip().rstrip(',') for name in name_matches]
+    name_matches = [name.replace('\n', ' ').strip().rstrip(',') for name in name_matches]
                 #name_matches = [name.replace('\n', ' ').strip() for name in name_matches]
-                names.extend(name_matches)
+    names.extend(name_matches)
     # Remove duplicates and sort names
     names = [re.sub(r'^\d+\)\s*', '', name).strip() for name in names]
     print(f"📊 Total names found: {len(names)}")
@@ -67,24 +73,37 @@ def extract_names(pdf_path):
 def extract_details(record):
     # Step 2: Extract details from one foreclosure record
     print(f"🔍 Extracting details from record: {record[:100]}...")  # Print the first 100 characters for context
-
+    #print(record)
     # Updated address patterns
     address_pattern = r'\b\d{1,5}\s[\w\s\-.]+?,\s[\w\s]+,\s[A-Z]{2}\s\d{5}(?:-\d{4})?\b'
     address_pattern_commonly = r'Commonly known as[:\s]*([\w\s\-.]+?),\s*([\w\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)'
     address_pattern_condo = r'(?:Situated in|Unit(?:s)?\s\d+,)\s*([\w\s\-.]+?),\s*([\w\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)'
+    address_pattern_street = r'(?<=Common street address:)\s*([\w\s\-.#]+?,\s*[\w\s]+?,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?)'
+    address_pattern_flexible = r'(?:\b\d{1,5}\s[\w\s\-.#]+?,\s[\w\s]+?,\s[A-Z]{2}\s\d{5}(?:-\d{4})?\b)|(?:Commonly known as[:\s]*([\w\s\-.#]+?),\s*([\w\s]+?),\s*([A-Z]{2})?\s*(\d{5}(?:-\d{4})?))'
+    address_pattern_general = r"\d{4,5}\s+[A-Za-z0-9\s]+\.,\s+[A-Za-z\s]+,\s+(Michigan|MI)\s+\d{5}"
+
 
     # Match address patterns
     address_match = re.search(address_pattern, record)
     address_match_commonly = re.search(address_pattern_commonly, record)
     address_match_condo = re.search(address_pattern_condo, record)
-
+    address_match_street = re.search(address_pattern_street, record)
+    address_match_flexible = re.search(address_pattern_flexible, record)
+    address_match_general = re.search(address_pattern_general, record)
     # Extract address based on the first matching pattern
+    
     if address_match:
         address = address_match.group(0).strip()
     elif address_match_commonly:
         address = f"{address_match_commonly.group(1)}, {address_match_commonly.group(2)}, {address_match_commonly.group(3)} {address_match_commonly.group(4)}"
     elif address_match_condo:
         address = f"{address_match_condo.group(1)}, {address_match_condo.group(2)}, {address_match_condo.group(3)} {address_match_condo.group(4)}"
+    elif address_match_street:
+        address = address_match_street.group(0).strip()
+    elif address_match_flexible:
+        address = address_match_flexible.group(0).strip()
+    elif address_match_general:
+        address = address_match_general.group(0).strip()
     else:
         address = "Not available"
     print(f"📍 Address: {address}")
