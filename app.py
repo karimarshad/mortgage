@@ -301,6 +301,11 @@ def upload_file_post():
                     writer = csv.DictWriter(file, fieldnames=["Name", "Address", "Loan Amount", "Auction Date", "Today's Date"])
                     writer.writeheader()
                     writer.writerows(detailed_results)
+
+                # Remove the uploaded PDF file after processing
+                os.remove(file_path)
+                print(f"🗑️ Deleted uploaded file: {file_path}")
+
                 return redirect(url_for('download_file', filename=f'foreclosure_records_{timestamp}.csv'))
             except ValueError as ve:
                 flash(str(ve))
