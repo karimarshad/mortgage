@@ -19,7 +19,10 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def normalize_text(text):
-    """Normalize whitespace in the text by removing extra spaces and newlines."""
+    """Normalize whitespace in the text by removing extra spaces and newlines, and exclude specific addresses."""
+    # Remove all instances of the specific address
+    text = re.sub(r'1200 N\. Telegraph Road, Pontiac, MI 48341', '', text)
+    # Normalize whitespace
     return re.sub(r'\s+', ' ', text).strip()
 
 def parse_foreclosure_records(pdf_path):
@@ -32,7 +35,7 @@ def parse_foreclosure_records(pdf_path):
             print(f"🔍 Extracting text from page {page_num + 1}...")
             if text:
                 # Normalize the text
-                #text = normalize_text(text)
+                text = normalize_text(text)
                 full_text += " " + normalize_text(text)  # Append page text with a space NEW CODE to fix address parsing issue
                 # Split the text into individual foreclosure notices based on "(Mortgage Foreclosure)"
                 #records = re.split(r"\([Mm]ortgage Foreclosure\)", text)
@@ -81,6 +84,10 @@ def extract_details(record):
     address_pattern_street = r'(?<=Common street address:)\s*([\w\s\-.#]+?,\s*[\w\s]+?,\s*[A-Z]{2}\s*\d{5}(?:-\d{4})?)'
     address_pattern_flexible = r'(?:\b\d{1,5}\s[\w\s\-.#]+?,\s[\w\s]+?,\s[A-Z]{2}\s\d{5}(?:-\d{4})?\b)|(?:Commonly known as[:\s]*([\w\s\-.#]+?),\s*([\w\s]+?),\s*([A-Z]{2})?\s*(\d{5}(?:-\d{4})?))'
     address_pattern_general = r"\d{4,5}\s+[A-Za-z0-9\s]+\.,\s+[A-Za-z\s]+,\s+(Michigan|MI)\s+\d{5}"
+    #address_pattern_improved = r'\b\d{1,5}\s[\w\s\-.#]+?,\s[\w\s]+,\s[A-Z]{2}\s\d{5}(?:-\d{4})?\b'
+    address_pattern_improved = r'\d{1,5}\s[\w\s]+,\s[\w\s]+,\sMichigan\s\d{5}'
+    #address_pattern_context = r'(?:Situated in|Unit(?:s)?\s\d+|Located at|Property address|Commonly known as[:\s]*)\s*([\w\s\-.#]+?),\s*([\w\s]+),\s*([A-Z]{2})\s*(\d{5}(?:-\d{4})?)
+
 
 
     # Match address patterns
@@ -90,20 +97,33 @@ def extract_details(record):
     address_match_street = re.search(address_pattern_street, record)
     address_match_flexible = re.search(address_pattern_flexible, record)
     address_match_general = re.search(address_pattern_general, record)
+    address_match_improved = re.search(address_pattern_improved, record)
+   # address_match_context = re.search(address_pattern_context, record)
     # Extract address based on the first matching pattern
     
-    if address_match:
-        address = address_match.group(0).strip()
-    elif address_match_commonly:
-        address = f"{address_match_commonly.group(1)}, {address_match_commonly.group(2)}, {address_match_commonly.group(3)} {address_match_commonly.group(4)}"
+    if address_match_commonly:
+        address = f"{address_match_commonly.group(1)}, {address_match_commonly.group(2)}, {address_match_commonly.group(3)}, {address_match_commonly.group(4)}"
+        print(f"Address Match Commonly: {address}")
+    elif address_match:
+        address = address_match.group(0).strip()    
+        print(f"Address Match: {address}")   
     elif address_match_condo:
-        address = f"{address_match_condo.group(1)}, {address_match_condo.group(2)}, {address_match_condo.group(3)} {address_match_condo.group(4)}"
+        address = f"{address_match_condo.group(1)}, {address_match_condo.group(2)}, {address_match_condo.group(3)}, {address_match_condo.group(4)}"
+        print(f"Address Match Condo: {address}")
     elif address_match_street:
         address = address_match_street.group(0).strip()
+        print(f"Address Match Street: {address}")
     elif address_match_flexible:
         address = address_match_flexible.group(0).strip()
+        print(f"Address Match Flexible: {address}")
     elif address_match_general:
         address = address_match_general.group(0).strip()
+        print(f"Address Match General: {address}")
+    elif address_match_improved:
+        address = address_match_improved.group(0).strip()
+        print(f"Address Match Improved: {address}")
+    #elif address_match_context:
+    #    address =  address_match_improved.group(0).strip() #"{address_match_context.group(1)}, {address_match_context.group(2)}, {address_match_context.group(3)} {address_match_context.group(4)}"
     else:
         address = "Not available"
     print(f"📍 Address: {address}")
