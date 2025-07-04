@@ -22,6 +22,8 @@ def normalize_text(text):
     """Normalize whitespace in the text by removing extra spaces and newlines, and exclude specific addresses."""
     # Remove all instances of the specific address
     text = re.sub(r'1200 N\. Telegraph Road, Pontiac, MI 48341', '', text)
+    text = re.sub(r'23938 Research Dr, Suite 300 Farmington Hills, MI 48335', '', text)
+    text = re.sub(r'615 Griswold Street, Suite 1425 Detroit, Michigan 48226', '', text)
     # Normalize whitespace
     return re.sub(r'\s+', ' ', text).strip()
 
